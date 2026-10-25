@@ -77,7 +77,7 @@ export default function App() {
 
   // Employees
   const addEmployee = (emp: Omit<Employee, 'id'>) =>
-    setEmployees(prev => [...prev, { ...emp, id: uid() }]);
+    setEmployees(prev => [...prev, { ...emp, id: (emp as Omit<Employee, 'id'> & { id?: string }).id || uid() }]);
   const toggleEmployeeActive = (id: string) =>
     setEmployees(prev => prev.map(e => e.id === id ? { ...e, active: !e.active } : e));
   const removeEmployee = (id: string) =>
