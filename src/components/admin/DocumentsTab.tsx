@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Employee, HRDocument, DocumentType } from '../../types';
 import { Badge, Field, Input, Select, FilterSelect, PlusIcon, TrashIcon, CheckIcon } from '../ui';
-
+import { downloadSignedPdf } from '../../lib/signedPdf';
 interface Props {
   employees: Employee[];
   documents: HRDocument[];
@@ -233,9 +233,15 @@ export default function DocumentsTab({ employees, documents, onAdd, onRemove, on
                 <p className="text-white/35 text-[11px] font-mono truncate">{doc.fileName}</p>
                 <p className="text-white/25 text-[11px] mt-1"><EmpLink id={doc.employeeId} employees={employees} onSelectEmployee={onSelectEmployee} /> · {doc.month}/{doc.year}</p>
               </div>
-              <button onClick={() => onRemove(doc.id)} className="w-9 h-9 flex items-center justify-center text-white/20 hover:text-red-400 hover:bg-red-500/8 rounded-xl transition flex-shrink-0">
-                <TrashIcon />
-              </button>
+              <div className="flex items-center gap-1 flex-shrink-0">
+  {doc.pdfUrl && doc.signature && doc.signedAt && (
+    <button title="Baixar PDF assinado" onClick={() => {
+      void downloadSignedPdf(doc.pdfUrl!, doc.signature!, doc.fileName, doc.signedAt!)
+        .catch(error => alert(error instanceof Error ? error.message : 'Erro ao baixar PDF.'));
+    }} className="px-2 py-2 text-[10px] font-bold text-orange-400 hover:bg-orange-500/10 rounded-lg">PDF â†“</button>
+  )}
+  <button onClick={() => onRemove(doc.id)} className="w-9 h-9 flex items-center justify-center text-white/20 hover:text-red-400 hover:bg-red-500/8 rounded-xl transition flex-shrink-0"><TrashIcon /></button>
+</div>
             </div>
             <div className="mt-3">
               {doc.signedAt
@@ -285,9 +291,15 @@ export default function DocumentsTab({ employees, documents, onAdd, onRemove, on
                   }
                 </td>
                 <td className="px-4 py-3.5">
-                  <button onClick={() => onRemove(doc.id)} className="w-8 h-8 flex items-center justify-center text-white/20 hover:text-red-400 hover:bg-red-500/8 rounded-lg transition">
-                    <TrashIcon />
-                  </button>
+                  <div className="flex items-center justify-end gap-2">
+  {doc.pdfUrl && doc.signature && doc.signedAt && (
+    <button title="Baixar PDF assinado" onClick={() => {
+      void downloadSignedPdf(doc.pdfUrl!, doc.signature!, doc.fileName, doc.signedAt!)
+        .catch(error => alert(error instanceof Error ? error.message : 'Erro ao baixar PDF.'));
+    }} className="px-2 py-2 text-[10px] font-bold text-orange-400 hover:bg-orange-500/10 rounded-lg">PDF â†“</button>
+  )}
+  <button onClick={() => onRemove(doc.id)} className="w-8 h-8 flex items-center justify-center text-white/20 hover:text-red-400 hover:bg-red-500/8 rounded-lg transition"><TrashIcon /></button>
+</div>
                 </td>
               </tr>
             ))}

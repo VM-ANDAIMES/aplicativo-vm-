@@ -1,3 +1,4 @@
+import { downloadSignedPdf } from '../../lib/signedPdf';
 import { useState } from 'react';
 import { Employee, EPI } from '../../types';
 import { Badge, Field, Input, Select, FilterSelect, PlusIcon, TrashIcon, CheckIcon } from '../ui';
@@ -195,9 +196,15 @@ export default function EPITab({ employees, epis, onAdd, onRemove, onSelectEmplo
                   <span>{epi.ca}</span><span>·</span><span>Qtd {epi.quantity}</span>
                 </div>
               </div>
-              <button onClick={() => setConfirmRemove(epi)} className="w-9 h-9 flex items-center justify-center text-white/20 hover:text-red-400 hover:bg-red-500/8 rounded-xl transition flex-shrink-0">
-                <TrashIcon />
-              </button>
+              <div className="flex items-center gap-1 flex-shrink-0">
+  {epi.pdfUrl && epi.signature && epi.signedAt && (
+    <button title="Baixar recibo assinado" onClick={() => {
+      void downloadSignedPdf(epi.pdfUrl!, epi.signature!, `Recibo_EPI_${epi.name}`, epi.signedAt!)
+        .catch(error => alert(error instanceof Error ? error.message : 'Erro ao baixar PDF.'));
+    }} className="px-2 py-2 text-[10px] font-bold text-orange-400 hover:bg-orange-500/10 rounded-lg">PDF â†“</button>
+  )}
+  <button onClick={() => setConfirmRemove(epi)} className="w-9 h-9 flex items-center justify-center text-white/20 hover:text-red-400 hover:bg-red-500/8 rounded-xl transition flex-shrink-0"><TrashIcon /></button>
+</div>
             </div>
             <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/[0.05]">
               <div>{expiryBadge(epi.expirationDate)}</div>
@@ -240,9 +247,15 @@ export default function EPITab({ employees, epis, onAdd, onRemove, onSelectEmplo
                   {epi.signed ? <Badge variant="success"><CheckIcon /> Assinado</Badge> : <Badge variant="warning">Aguardando</Badge>}
                 </td>
                 <td className="px-4 py-3.5">
-                  <button onClick={() => setConfirmRemove(epi)} className="w-8 h-8 flex items-center justify-center text-white/20 hover:text-red-400 hover:bg-red-500/8 rounded-lg transition">
-                    <TrashIcon />
-                  </button>
+                  <div className="flex items-center justify-end gap-2">
+  {epi.pdfUrl && epi.signature && epi.signedAt && (
+    <button title="Baixar recibo assinado" onClick={() => {
+      void downloadSignedPdf(epi.pdfUrl!, epi.signature!, `Recibo_EPI_${epi.name}`, epi.signedAt!)
+        .catch(error => alert(error instanceof Error ? error.message : 'Erro ao baixar PDF.'));
+    }} className="px-2 py-2 text-[10px] font-bold text-orange-400 hover:bg-orange-500/10 rounded-lg">PDF â†“</button>
+  )}
+  <button onClick={() => setConfirmRemove(epi)} className="w-8 h-8 flex items-center justify-center text-white/20 hover:text-red-400 hover:bg-red-500/8 rounded-lg transition"><TrashIcon /></button>
+</div>
                 </td>
               </tr>
             ))}
