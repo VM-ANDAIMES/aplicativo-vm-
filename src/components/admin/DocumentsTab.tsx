@@ -73,12 +73,36 @@ function AddDocModal({ employees, onAdd, onClose }: { employees: Employee[]; onA
   }>({ employeeId: '', type: 'holerite', month: MONTHS[new Date().getMonth()], year: new Date().getFullYear(), fileName: '' });
   const { pdfData, pdfName, handleFile } = usePDFUpload();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const typeLabel = DOC_TYPES.find(t => t.value === form.type)?.label ?? form.type;
-    onAdd({ ...form, fileName: pdfName || `${typeLabel}-${form.month}-${form.year}.pdf`, pdfUrl: pdfData });
-    onClose();
-  };
+  
+const handleSubmit = (e: React.FormEvent) => {
+  e.preventDefault();
+
+  if (!form.employeeId) {
+    alert('Selecione um funcionário.');
+    return;
+  }
+
+  if (!pdfData) {
+    alert('Selecione o arquivo PDF antes de salvar.');
+    return;
+  }
+
+  if (!pdfData.startsWith('data:application/pdf;base64,')) {
+    alert('O arquivo selecionado não parece ser um PDF válido.');
+    return;
+  }
+
+  const typeLabel =
+    DOC_TYPES.find(t => t.value === form.type)?.label ?? form.type;
+
+  onAdd({
+    ...form,
+    fileName: pdfName || `${typeLabel}-${form.month}-${form.year}.pdf`,
+    pdfUrl: pdfData,
+  });
+
+  onClose();
+};
 
   return (
     <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center z-50">
@@ -134,7 +158,31 @@ function AddDocModal({ employees, onAdd, onClose }: { employees: Employee[]; onA
     </div>
   );
 }
+function EmpLink({
+  id,
+  employees,
+  onSelectEmployee,
+}: {
+  id: string;
+  employees: Employee[];
+  onSelectEmployee?: (employee: Employee) => void;
+}) {
+  const emp = employees.find(e => e.id === id);
 
+  if (!emp || !onSelectEmployee) {
+    return <span className="text-white/55">{emp?.name ?? id}</span>;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelectEmployee(emp)}
+      className="text-white/80 hover:text-orange-400 font-medium transition underline-offset-2 hover:underline text-left"
+    >
+      {emp.name}
+    </button>
+  );
+}
 export default function DocumentsTab({ employees, documents, onAdd, onRemove, onSelectEmployee }: Props) {
   const [filterEmp, setFilterEmp] = useState('');
   const [filterType, setFilterType] = useState('');
@@ -144,17 +192,6 @@ export default function DocumentsTab({ employees, documents, onAdd, onRemove, on
     (!filterEmp || d.employeeId === filterEmp) &&
     (!filterType || d.type === filterType)
   );
-  const getEmp = (id: string) => employees.find(e => e.id === id);
-  const empName = (id: string) => getEmp(id)?.name ?? id;
-  const EmpLink = ({ id }: { id: string }) => {
-    const emp = getEmp(id);
-    if (!emp || !onSelectEmployee) return <span className="text-white/55">{empName(id)}</span>;
-    return (
-      <button onClick={() => onSelectEmployee(emp)} className="text-white/80 hover:text-orange-400 font-medium transition underline-offset-2 hover:underline text-left">
-        {emp.name}
-      </button>
-    );
-  };
 
   return (
     <div>
@@ -194,7 +231,7 @@ export default function DocumentsTab({ employees, documents, onAdd, onRemove, on
               <div className="flex-1 min-w-0">
                 <p className="text-white/85 font-semibold text-[13px]">{typeLabel(doc.type)}</p>
                 <p className="text-white/35 text-[11px] font-mono truncate">{doc.fileName}</p>
-                <p className="text-white/25 text-[11px] mt-1"><EmpLink id={doc.employeeId} /> · {doc.month}/{doc.year}</p>
+                <p className="text-white/25 text-[11px] mt-1"><EmpLink id={doc.employeeId} employees={employees} onSelectEmployee={onSelectEmployee} /> · {doc.month}/{doc.year}</p>
               </div>
               <button onClick={() => onRemove(doc.id)} className="w-9 h-9 flex items-center justify-center text-white/20 hover:text-red-400 hover:bg-red-500/8 rounded-xl transition flex-shrink-0">
                 <TrashIcon />
@@ -239,7 +276,7 @@ export default function DocumentsTab({ employees, documents, onAdd, onRemove, on
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-3.5 hidden md:table-cell"><EmpLink id={doc.employeeId} /></td>
+                <td className="px-4 py-3.5 hidden md:table-cell"><EmpLink id={doc.employeeId} employees={employees} onSelectEmployee={onSelectEmployee} /></td>
                 <td className="px-4 py-3.5"><span className="font-mono text-white/35 text-[11px]">{doc.month}/{doc.year}</span></td>
                 <td className="px-4 py-3.5">
                   {doc.signedAt
