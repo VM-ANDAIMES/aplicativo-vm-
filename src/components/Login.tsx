@@ -28,37 +28,39 @@ export default function Login({ admins, employees, onLogin }: LoginProps) {
     setLoading(true);
 
     try {
-      if (mode === 'admin') {
-        const { data, error: authError } =
-          await supabase.auth.signInWithPassword({
-            email: login.trim(),
-            password,
-          });
+      const { data, error: authError } =
+        await supabase.auth.signInWithPassword({
+          email: login.trim(),
+          password,
+        });
 
-        if (authError || !data.user) {
-          setError('E-mail ou senha incorretos.');
+      if (authError || !data.user) {
+        setError('E-mail ou senha incorretos.');
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('vm_user_profiles')
+        .select('id, full_name, role, employee_id')
+        .eq('id', data.user.id)
+        .maybeSingle();
+
+      if (profileError || !profile) {
+        console.error('Erro ao consultar perfil:', profileError);
+        await supabase.auth.signOut();
+        setError(
+          'Não foi possível localizar seu perfil. Entre em contato com o administrador.'
+        );
+        return;
+      }
+
+      if (mode === 'admin') {
+        if (profile.role !== 'admin') {
+          await supabase.auth.signOut();
+          setError('Esta conta não tem permissão de administrador.');
           return;
         }
 
-        const { data: profile, error: profileError } = await supabase
-          .from('vm_user_profiles')
-          .select('id, full_name, role')
-          .eq('id', data.user.id)
-          .single();
-
-       if (profileError) {
-  console.error('Erro ao consultar perfil:', profileError);
-  setError(`Erro ao consultar perfil: ${profileError.message}`);
-  await supabase.auth.signOut();
-  return;
-}
-
-if (!profile || profile.role !== 'admin') {
-  console.error('Perfil recebido:', profile);
-  setError('Perfil não encontrado ou sem permissão de administrador.');
-  await supabase.auth.signOut();
-  return;
-}
         const admin: Admin = {
           id: profile.id,
           name: profile.full_name,
@@ -70,46 +72,84 @@ if (!profile || profile.role !== 'admin') {
         return;
       }
 
-    
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email: login.trim(),
-        password,
-      });
-
-      if (authError || !data.user) {
-        setError('E-mail ou senha incorretos.');
-        return;
-      }
-
-      const { data: profile, error: profileError } = await supabase
-        .from('vm_user_profiles')
-        .select('id, full_name, role, employee_id')
-        .eq('id', data.user.id)
-        .single();
-
-      if (profileError || !profile || profile.role !== 'employee') {
+      if (profile.role !== 'employee') {
         await supabase.auth.signOut();
-        setError('Perfil de funcionário não encontrado ou sem permissão.');
+        setError('Esta conta não tem permissão de funcionário.');
         return;
       }
 
+      const email = (data.user.email ?? login).trim().toLowerCase();
+
+      // Primeiro, tenta encontrar o cadastro já sincronizado no aplicativo.
       const employee = employees.find(
         (item) =>
-          item.email?.trim().toLowerCase() ===
-            (data.user.email ?? '').trim().toLowerCase() ||
-          item.login?.trim().toLowerCase() ===
-            (data.user.email ?? '').trim().toLowerCase()
+          item.email?.trim().toLowerCase() === email ||
+          item.login?.trim().toLowerCase() === email
       );
 
-      if (employee && employee.active) {
+      if (employee) {
+        if (!employee.active) {
+          await supabase.auth.signOut();
+          setError('Funcionário inativo. Procure o administrador.');
+          return;
+        }
+
         onLogin({ role: 'employee', employee });
         return;
       }
 
-      await supabase.auth.signOut();
-      setError('Funcionário não encontrado na lista ou está inativo.');
-    } catch {
-      setError('Não foi possível entrar. Verifique sua conexão e tente novamente.');
+      // Se não estiver na lista sincronizada, consulta o cadastro no Supabase.
+      const { data: employeeData, error: employeeError } = await supabase
+        .from('vm_employees')
+        .select(
+          'id, auth_user_id, name, cpf, role, department, admission_date, email, login, active, phone'
+        )
+        .eq('auth_user_id', data.user.id)
+        .maybeSingle();
+
+      if (employeeError) {
+        console.error('Erro ao consultar funcionário:', employeeError);
+        await supabase.auth.signOut();
+        setError(
+          'Não foi possível consultar seu cadastro. Verifique as permissões do sistema.'
+        );
+        return;
+      }
+
+      if (!employeeData) {
+        await supabase.auth.signOut();
+        setError(
+          'Conta autenticada, mas o cadastro do funcionário não foi localizado.'
+        );
+        return;
+      }
+
+      if (!employeeData.active) {
+        await supabase.auth.signOut();
+        setError('Funcionário inativo. Procure o administrador.');
+        return;
+      }
+
+      const employeeFromDatabase: Employee = {
+        id: employeeData.id,
+        name: employeeData.name,
+        cpf: employeeData.cpf ?? '',
+        role: employeeData.role ?? '',
+        department: employeeData.department ?? '',
+        admissionDate: employeeData.admission_date ?? '',
+        email: employeeData.email ?? email,
+        login: employeeData.login ?? email,
+        password: '',
+        active: employeeData.active,
+        phone: employeeData.phone ?? '',
+      };
+
+      onLogin({ role: 'employee', employee: employeeFromDatabase });
+    } catch (err) {
+      console.error('Erro durante o login:', err);
+      setError(
+        'Não foi possível entrar. Verifique sua conexão e as permissões do sistema.'
+      );
     } finally {
       setLoading(false);
     }
@@ -334,14 +374,14 @@ function LoginForm({
       <form onSubmit={onSubmit} className="space-y-3">
         <div>
           <label className={labelCls}>
-            {mode === 'admin' ? 'E-mail do administrador' : 'Login'}
+            {mode === 'admin' ? 'E-mail do administrador' : 'E-mail do funcionário'}
           </label>
           <input
-            type={mode === 'admin' ? 'email' : 'text'}
-            autoComplete={mode === 'admin' ? 'email' : 'username'}
+            type="email"
+            autoComplete="email"
             value={login}
             onChange={(e) => onChangeLogin(e.target.value)}
-            placeholder={mode === 'admin' ? 'Seu e-mail' : 'Seu login'}
+            placeholder="Seu e-mail"
             required
             className={inputCls}
           />
