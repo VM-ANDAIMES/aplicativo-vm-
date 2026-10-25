@@ -70,19 +70,44 @@ if (!profile || profile.role !== 'admin') {
         return;
       }
 
+    
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: login.trim(),
+        password,
+      });
+
+      if (authError || !data.user) {
+        setError('E-mail ou senha incorretos.');
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('vm_user_profiles')
+        .select('id, full_name, role, employee_id')
+        .eq('id', data.user.id)
+        .single();
+
+      if (profileError || !profile || profile.role !== 'employee') {
+        await supabase.auth.signOut();
+        setError('Perfil de funcionário não encontrado ou sem permissão.');
+        return;
+      }
+
       const employee = employees.find(
         (item) =>
-          item.login === login.trim() &&
-          item.password === password &&
-          item.active
+          item.email?.trim().toLowerCase() ===
+            (data.user.email ?? '').trim().toLowerCase() ||
+          item.login?.trim().toLowerCase() ===
+            (data.user.email ?? '').trim().toLowerCase()
       );
 
-      if (employee) {
+      if (employee && employee.active) {
         onLogin({ role: 'employee', employee });
         return;
       }
 
-      setError('Login ou senha incorretos.');
+      await supabase.auth.signOut();
+      setError('Funcionário não encontrado na lista ou está inativo.');
     } catch {
       setError('Não foi possível entrar. Verifique sua conexão e tente novamente.');
     } finally {
