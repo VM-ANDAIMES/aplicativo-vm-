@@ -1,4 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 import { Aviso, Employee, HRDocument, EPI, NR, ASO, Notification } from '../../types';
 import SignatureModal from '../SignatureModal';
 import { Badge, CheckIcon } from '../ui';
@@ -65,6 +69,7 @@ function dataUrlToBlobUrl(dataUrl: string): string {
 }
 
 
+
 /* ── PDF Viewer dentro do aplicativo ── */
 
 function PDFViewerModal({
@@ -76,33 +81,137 @@ function PDFViewerModal({
   url: string;
   onClose: () => void;
 }) {
-  const [viewerUrl, setViewerUrl] = useState('');
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const [pdfDoc, setPdfDoc] = useState<any>(null);
+  const [pageNumber, setPageNumber] = useState(1);
+  const [numPages, setNumPages] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
+  // Carrega o arquivo PDF.
   useEffect(() => {
-    let currentUrl = url;
+    let cancelled = false;
+    let loadedDocument: any = null;
 
-    try {
-      // Converte o PDF em Base64 para uma URL que o visualizador
-      // interno do navegador consiga exibir.
-      if (url.startsWith('data:application/pdf;base64,')) {
-        currentUrl = dataUrlToBlobUrl(url);
-      }
-
-      setViewerUrl(currentUrl);
+    async function loadPDF() {
+      setLoading(true);
       setLoadError(false);
-    } catch (error) {
-      console.error('Erro ao preparar o PDF:', error);
-      setLoadError(true);
+      setPdfDoc(null);
+      setPageNumber(1);
+      setNumPages(0);
+
+      try {
+        const response = await fetch(url);
+
+        if (!response.ok) {
+          throw new Error('Não foi possível acessar o PDF.');
+        }
+
+        const buffer = await response.arrayBuffer();
+
+        if (buffer.byteLength === 0) {
+          throw new Error('O arquivo PDF está vazio.');
+        }
+
+        const pdf = await pdfjsLib.getDocument({
+          data: new Uint8Array(buffer),
+        }).promise;
+
+        if (cancelled) {
+          await pdf.destroy();
+          return;
+        }
+
+        loadedDocument = pdf;
+        setPdfDoc(pdf);
+        setNumPages(pdf.numPages);
+      } catch (error) {
+        console.error('Erro ao carregar PDF:', error);
+
+        if (!cancelled) {
+          setLoadError(true);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
     }
 
+    void loadPDF();
+
     return () => {
-      // Libera a memória quando o visualizador for fechado.
-      if (currentUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(currentUrl);
+      cancelled = true;
+
+      if (loadedDocument) {
+        void loadedDocument.destroy();
       }
     };
   }, [url]);
+
+  // Desenha a página diretamente em um canvas.
+  useEffect(() => {
+    if (!pdfDoc || !canvasRef.current || !containerRef.current) {
+      return;
+    }
+
+    let cancelled = false;
+    let renderTask: any = null;
+
+    async function renderPage() {
+      try {
+        const page = await pdfDoc.getPage(pageNumber);
+
+        if (cancelled || !canvasRef.current || !containerRef.current) {
+          return;
+        }
+
+        const canvas = canvasRef.current;
+        const context = canvas.getContext('2d');
+
+        if (!context) {
+          throw new Error('Não foi possível preparar a visualização.');
+        }
+
+        const baseViewport = page.getViewport({ scale: 1 });
+        const availableWidth = Math.max(
+          200,
+          containerRef.current.clientWidth - 24
+        );
+
+        const scale = availableWidth / baseViewport.width;
+        const viewport = page.getViewport({ scale });
+        const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+
+        canvas.width = Math.floor(viewport.width * pixelRatio);
+        canvas.height = Math.floor(viewport.height * pixelRatio);
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
+
+        context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+
+        renderTask = page.render({
+          canvasContext: context,
+          viewport,
+        });
+
+        await renderTask.promise;
+      } catch (error: any) {
+        if (error?.name !== 'RenderingCancelledException') {
+          console.error('Erro ao renderizar página:', error);
+        }
+      }
+    }
+
+    void renderPage();
+
+    return () => {
+      cancelled = true;
+      renderTask?.cancel();
+    };
+  }, [pdfDoc, pageNumber]);
 
   return (
     <div
@@ -112,76 +221,84 @@ function PDFViewerModal({
       aria-label={`Visualização do documento: ${title}`}
     >
       <div className="flex h-full max-h-[95dvh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#141414] shadow-2xl">
-        {/* Cabeçalho do visualizador */}
-        <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
+        <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
           <div className="min-w-0 flex-1">
             <h2 className="text-sm font-bold text-white sm:text-base">
               Documento PDF
             </h2>
-            <p className="mt-1 truncate text-xs text-white/55">
-              {title}
-            </p>
+            <p className="mt-1 truncate text-xs text-white/55">{title}</p>
           </div>
 
           <div className="flex flex-shrink-0 items-center gap-2">
-            {viewerUrl && !loadError && (
-              <a
-                href={viewerUrl}
-                download={`${title.replace(/[\\/:*?"<>|]/g, '_')}.pdf`}
-                className="flex min-h-[40px] items-center justify-center rounded-xl border border-white/15 px-3 text-xs font-semibold text-white/80 transition hover:bg-white/10"
-              >
-                Baixar PDF
-              </a>
-            )}
-
             <button
               type="button"
               onClick={onClose}
-              className="flex min-h-[40px] items-center justify-center rounded-xl bg-orange-500 px-4 text-xs font-bold text-white transition hover:bg-orange-400"
+              className="flex min-h-[40px] items-center justify-center rounded-xl bg-orange-500 px-4 text-xs font-bold text-white hover:bg-orange-400"
             >
               Fechar
             </button>
           </div>
         </div>
 
-        {/* Documento exibido dentro do aplicativo */}
-        <div className="relative min-h-0 flex-1 bg-white">
-          {loadError ? (
-            <div className="flex h-full flex-col items-center justify-center gap-3 bg-[#141414] px-6 text-center">
+        <div
+          ref={containerRef}
+          className="relative min-h-0 flex-1 overflow-auto bg-[#333333] p-3"
+        >
+          {loading ? (
+            <div className="flex min-h-full items-center justify-center">
+              <p className="text-sm text-white/70">
+                Carregando documento...
+              </p>
+            </div>
+          ) : loadError ? (
+            <div className="flex min-h-full flex-col items-center justify-center gap-3 px-6 text-center">
               <span className="text-4xl">📄</span>
               <p className="text-sm font-semibold text-white">
                 Não foi possível carregar o documento.
               </p>
-              <p className="max-w-md text-xs leading-relaxed text-white/50">
-                Verifique se o arquivo PDF está válido e tente novamente.
+              <p className="text-xs text-white/50">
+                Verifique se o arquivo é um PDF válido e tente novamente.
               </p>
-              <button
-                type="button"
-                onClick={onClose}
-                className="mt-2 min-h-[44px] rounded-xl bg-orange-500 px-5 text-sm font-bold text-white hover:bg-orange-400"
-              >
-                Voltar
-              </button>
             </div>
-          ) : viewerUrl ? (
-            <iframe
-              key={viewerUrl}
-              src={viewerUrl}
-              title={`PDF: ${title}`}
-              className="h-full w-full border-0 bg-white"
-              style={{ minHeight: 0 }}
-            />
           ) : (
-            <div className="flex h-full items-center justify-center bg-[#141414]">
-              <p className="text-sm text-white/60">
-                Carregando documento...
-              </p>
+            <div className="flex min-w-full justify-center">
+              <canvas
+                ref={canvasRef}
+                className="max-w-none bg-white shadow-xl"
+              />
             </div>
           )}
         </div>
 
-        {/* Rodapé */}
-        <div className="flex flex-shrink-0 items-center justify-center border-t border-white/10 bg-[#141414] px-3 py-2">
+        <div className="flex flex-shrink-0 items-center justify-between gap-3 border-t border-white/10 bg-[#141414] px-4 py-3">
+          <button
+            type="button"
+            disabled={loading || loadError || pageNumber <= 1}
+            onClick={() => setPageNumber(p => Math.max(1, p - 1))}
+            className="min-h-[40px] rounded-xl border border-white/15 px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            ← Anterior
+          </button>
+
+          <span className="text-center text-xs text-white/65">
+            {numPages > 0
+              ? `Página ${pageNumber} de ${numPages}`
+              : 'VM Andaimes'}
+          </span>
+
+          <button
+            type="button"
+            disabled={loading || loadError || pageNumber >= numPages}
+            onClick={() =>
+              setPageNumber(p => Math.min(numPages, p + 1))
+            }
+            className="min-h-[40px] rounded-xl border border-white/15 px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            Próxima →
+          </button>
+        </div>
+
+        <div className="flex flex-shrink-0 justify-center bg-[#141414] px-3 pb-2">
           <p className="text-center text-[10px] text-white/35">
             VM Andaimes · Portal do Colaborador
           </p>
