@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { supabase } from '../../lib/supabase';
 import { Employee } from '../../types';
 import { Badge, Field, Input, EmptyRow, PlusIcon, TrashIcon } from '../ui';
 
@@ -17,11 +18,61 @@ function AddEmployeeModal({ onAdd, onClose }: { onAdd: (emp: Omit<Employee, 'id'
   const [form, setForm] = useState(blank);
   const f = (key: string, value: string) => setForm(p => ({ ...p, [key]: value }));
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onAdd(form);
+  
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  if (!form.email.trim()) {
+    alert('Informe o e-mail do funcionário para criar o acesso.');
+    return;
+  }
+
+  if (form.password.length < 8) {
+    alert('A senha deve ter pelo menos 8 caracteres.');
+    return;
+  }
+
+  try {
+    const { data, error } = await supabase.functions.invoke(
+      'vm-create-employee',
+      {
+       body: {
+  name: form.name.trim(),
+  email: form.email.trim(),
+  password: form.password,
+  cpf: form.cpf.trim(),
+  role: form.role.trim(),
+  department: form.department.trim(),
+  admissionDate: form.admissionDate,
+  login: form.login.trim(),
+  phone: form.phone.trim(),
+},
+      }
+    );
+
+    if (error) throw error;
+
+    if (!data?.ok || !data?.user?.id) {
+      throw new Error(data?.error || 'Não foi possível criar a conta.');
+    }
+
+    onAdd({
+  ...form,
+  id: data.user.employeeId,
+  password: '',
+});  
+
     onClose();
-  };
+    alert('Conta criada com sucesso!');
+  } catch (error) {
+    console.error('Erro ao criar acesso:', error);
+    alert(
+      error instanceof Error
+        ? `Erro ao criar acesso: ${error.message}`
+        : 'Erro ao criar a conta do funcionário.'
+    );
+  }
+};
 
   return (
     <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center z-50">
