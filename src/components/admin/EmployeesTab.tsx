@@ -50,8 +50,22 @@ const handleSubmit = async (e: React.FormEvent) => {
       }
     );
 
-    if (error) throw error;
+    if (error) {
+  const details = (error as any).context;
 
+  let message = error.message;
+
+  if (details && typeof details.json === 'function') {
+    try {
+      const responseBody = await details.json();
+      message = responseBody.error || responseBody.message || message;
+    } catch {
+      // Mantém a mensagem original se a resposta não for JSON.
+    }
+  }
+
+  throw new Error(message);
+}
     if (!data?.ok || !data?.user?.id) {
       throw new Error(data?.error || 'Não foi possível criar a conta.');
     }
