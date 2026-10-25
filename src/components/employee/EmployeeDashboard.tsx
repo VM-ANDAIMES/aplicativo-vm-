@@ -611,7 +611,7 @@ export default function EmployeeDashboard({ employee, documents, epis, nrs, asos
                     <div className="flex gap-2 mt-3 pt-3 border-t border-white/[0.05]">
                       {doc.pdfUrl && (
                         <button
-                          onClick={() => setPdfViewer({ title: `${TYPE_LABEL[doc.type]} · ${doc.month}/${doc.year}`, url: doc.pdfUrl! })}
+                          onClick={() => window.open(doc.pdfUrl!, '_blank', 'noopener,noreferrer')}
                           className="flex-1 flex items-center justify-center gap-1.5 min-h-[44px] text-[12px] font-semibold text-white/60 border border-white/[0.12] hover:border-white/30 rounded-xl transition"
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
@@ -673,7 +673,7 @@ export default function EmployeeDashboard({ employee, documents, epis, nrs, asos
                     <div className="flex gap-2 mt-3">
                       {epi.pdfUrl && (
                         <button
-                          onClick={() => setPdfViewer({ title: `EPI: ${epi.name}`, url: epi.pdfUrl! })}
+                          onClick={() => window.open(epi.pdfUrl!, '_blank', 'noopener,noreferrer')}
                           className="flex-1 flex items-center justify-center gap-1.5 min-h-[44px] text-[12px] font-semibold text-white/60 border border-white/[0.12] hover:border-white/30 rounded-xl transition"
                         >
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
