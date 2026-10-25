@@ -25,27 +25,39 @@ function useCloudState<T>(key: string, fallback: T): [T, (updater: T | ((prev: T
   const [synced, setSynced] = useState(false);
   const mountedRef = useRef(true);
 
+  
   useEffect(() => {
-    mountedRef.current = true;
-    cloudGet<T>(key).then(data => {
-      if (!mountedRef.current) return;
-      if (data !== null) {
-        setLocal(data);
-        lsSet(key, data);
-      }
-      setSynced(true);
-    }).catch(() => { if (mountedRef.current) setSynced(true); });
-    return () => { mountedRef.current = false; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+    let active = true;
+    let loading = false;
 
-  const setState = useCallback((updater: T | ((prev: T) => T)) => {
-    setLocal(prev => {
-      const next = typeof updater === 'function' ? (updater as (p: T) => T)(prev) : updater;
-      lsSet(key, next);
-      cloudSet(key, next).catch(console.error);
-      return next;
-    });
+    const syncFromCloud = async () => {
+      if (loading) return;
+      loading = true;
+
+      try {
+        const data = await cloudGet<T>(key);
+
+        if (active && data !== null) {
+          setLocal(data);
+          lsSet(key, data);
+        }
+      } catch (error) {
+        console.error(`Erro ao sincronizar ${key}:`, error);
+      } finally {
+        loading = false;
+      }
+    };
+
+    void syncFromCloud();
+
+    const interval = window.setInterval(() => {
+      void syncFromCloud();
+    }, 10000);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
   }, [key]);
 
   return [state, setState, synced];
