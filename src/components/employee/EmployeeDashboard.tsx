@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Aviso, Employee, HRDocument, EPI, NR, ASO, Notification } from '../../types';
 import SignatureModal from '../SignatureModal';
 import { Badge, CheckIcon } from '../ui';
@@ -64,28 +64,128 @@ function dataUrlToBlobUrl(dataUrl: string): string {
   }
 }
 
-/* ── PDF Viewer ── */
-function PDFViewerModal({ title, url, onClose }: { title: string; url: string; onClose: () => void }) {
-  const [blobUrl, setBlobUrl] = useState(() => dataUrlToBlobUrl(url));
+
+/* ── PDF Viewer dentro do aplicativo ── */
+
+function PDFViewerModal({
+  title,
+  url,
+  onClose,
+}: {
+  title: string;
+  url: string;
+  onClose: () => void;
+}) {
+  const [viewerUrl, setViewerUrl] = useState('');
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    let currentUrl = url;
+
+    try {
+      // Converte o PDF em Base64 para uma URL que o visualizador
+      // interno do navegador consiga exibir.
+      if (url.startsWith('data:application/pdf;base64,')) {
+        currentUrl = dataUrlToBlobUrl(url);
+      }
+
+      setViewerUrl(currentUrl);
+      setLoadError(false);
+    } catch (error) {
+      console.error('Erro ao preparar o PDF:', error);
+      setLoadError(true);
+    }
+
+    return () => {
+      // Libera a memória quando o visualizador for fechado.
+      if (currentUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(currentUrl);
+      }
+    };
+  }, [url]);
+
   return (
-    <div className="fixed inset-0 bg-black flex flex-col z-50" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.08] flex-shrink-0 bg-[#0d0d0d]">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-7 h-7 rounded-lg bg-red-500/15 flex items-center justify-center flex-shrink-0">
-            <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}><path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 p-2 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Visualização do documento: ${title}`}
+    >
+      <div className="flex h-full max-h-[95dvh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#141414] shadow-2xl">
+        {/* Cabeçalho do visualizador */}
+        <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-bold text-white sm:text-base">
+              Documento PDF
+            </h2>
+            <p className="mt-1 truncate text-xs text-white/55">
+              {title}
+            </p>
           </div>
-          <div className="min-w-0">
-            <p className="text-white/90 font-semibold text-[13px] truncate">{title}</p>
-            <p className="text-white/25 text-[10px]">Visualize e feche para assinar</p>
+
+          <div className="flex flex-shrink-0 items-center gap-2">
+            {viewerUrl && !loadError && (
+              <a
+                href={viewerUrl}
+                download={`${title.replace(/[\\/:*?"<>|]/g, '_')}.pdf`}
+                className="flex min-h-[40px] items-center justify-center rounded-xl border border-white/15 px-3 text-xs font-semibold text-white/80 transition hover:bg-white/10"
+              >
+                Baixar PDF
+              </a>
+            )}
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex min-h-[40px] items-center justify-center rounded-xl bg-orange-500 px-4 text-xs font-bold text-white transition hover:bg-orange-400"
+            >
+              Fechar
+            </button>
           </div>
         </div>
-        <button onClick={onClose} className="flex items-center gap-1.5 px-3 py-1.5 min-h-[44px] text-[12px] font-semibold bg-orange-500 hover:bg-orange-400 text-white rounded-xl transition shadow-lg shadow-orange-500/25">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-          Fechar
-        </button>
-      </div>
-      <div className="flex-1 overflow-hidden">
-        <iframe src={blobUrl} className="w-full h-full border-0 bg-white" title={title} />
+
+        {/* Documento exibido dentro do aplicativo */}
+        <div className="relative min-h-0 flex-1 bg-white">
+          {loadError ? (
+            <div className="flex h-full flex-col items-center justify-center gap-3 bg-[#141414] px-6 text-center">
+              <span className="text-4xl">📄</span>
+              <p className="text-sm font-semibold text-white">
+                Não foi possível carregar o documento.
+              </p>
+              <p className="max-w-md text-xs leading-relaxed text-white/50">
+                Verifique se o arquivo PDF está válido e tente novamente.
+              </p>
+              <button
+                type="button"
+                onClick={onClose}
+                className="mt-2 min-h-[44px] rounded-xl bg-orange-500 px-5 text-sm font-bold text-white hover:bg-orange-400"
+              >
+                Voltar
+              </button>
+            </div>
+          ) : viewerUrl ? (
+            <iframe
+              key={viewerUrl}
+              src={viewerUrl}
+              title={`PDF: ${title}`}
+              className="h-full w-full border-0 bg-white"
+              style={{ minHeight: 0 }}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center bg-[#141414]">
+              <p className="text-sm text-white/60">
+                Carregando documento...
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Rodapé */}
+        <div className="flex flex-shrink-0 items-center justify-center border-t border-white/10 bg-[#141414] px-3 py-2">
+          <p className="text-center text-[10px] text-white/35">
+            VM Andaimes · Portal do Colaborador
+          </p>
+        </div>
       </div>
     </div>
   );
