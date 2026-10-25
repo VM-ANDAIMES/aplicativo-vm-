@@ -1,0 +1,10 @@
+{
+  "description": "Streamline HR management with admin and employee logins, enabling easy document management, digital signatures, and control of safety equipment.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
